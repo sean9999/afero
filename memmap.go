@@ -68,11 +68,7 @@ func (m *memMapSubFs) Lstat(name string) (fs.FileInfo, error) {
 	return info, err
 }
 
-// isRootedAt tells you if thispath exists within thatpath
-func isRootedAt(thispath, thatpath string) bool {
-	return strings.HasPrefix(thispath, thatpath)
-}
-
+// OpenRoot opens a
 func (m *memMapSubFs) OpenRoot(name string) (Root, error) {
 
 	info, err := m.Stat(name)
@@ -89,12 +85,15 @@ func (m *memMapSubFs) OpenRoot(name string) (Root, error) {
 		name,
 	}
 
-	Walk(m, name, func(path string, info fs.FileInfo, err error) error {
-		if isRootedAt(path, m.name) && !info.IsDir() {
+	err = Walk(m, name, func(path string, info fs.FileInfo, err error) error {
+		if strings.HasPrefix(m.name, fmt.Sprintf("%s%s", path, FilePathSeparator)) {
 			subFs.data[path] = m.data[path]
 		}
 		return nil
 	})
+	if err != nil {
+		return nil, fmt.Errorf("could not open root. %w", err)
+	}
 
 	return subFs, nil
 }
