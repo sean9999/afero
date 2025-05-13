@@ -25,6 +25,7 @@ package afero
 import (
 	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"time"
 )
@@ -49,6 +50,20 @@ type File interface {
 	Sync() error
 	Truncate(size int64) error
 	WriteString(s string) (ret int, err error)
+}
+
+// Root is a filesystem constrained to a particular directory.
+// see: [chroot](https://www.gnu.org/software/coreutils/manual/html_node/chroot-invocation.html#chroot-invocation)
+type Root interface {
+	Name() string
+	FS() Fs
+	OpenRoot(string) (Root, error)
+	Close() error
+	Create(string) (File, error)
+	Lstat(name string) (fs.FileInfo, error)
+	Mkdir(name string, perm fs.FileMode) error
+	Open(name string) (File, error)
+	OpenFile(name string, flag int, perm fs.FileMode) (File, error)
 }
 
 // Fs is the filesystem interface.
@@ -99,6 +114,13 @@ type Fs interface {
 
 	// Chtimes changes the access and modification times of the named file
 	Chtimes(name string, atime time.Time, mtime time.Time) error
+}
+
+type Fs2 interface {
+	Fs
+
+	// OpenRoot opens a [Root]
+	OpenRoot(name string) (Root, error)
 }
 
 var (

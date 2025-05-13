@@ -14,8 +14,10 @@
 package afero
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 
 	"log"
 	"os"
@@ -35,6 +37,66 @@ type MemMapFs struct {
 	mu   sync.RWMutex
 	data map[string]*mem.FileData
 	init sync.Once
+}
+
+type memMapSubFs struct {
+	*MemMapFs
+	name string
+}
+
+var _ Fs2 = (*memMapSubFs)(nil)
+var _ Root = (*memMapSubFs)(nil)
+
+func (m *memMapSubFs) Name() string {
+	return m.name
+}
+
+func (m *memMapSubFs) Close() error {
+	if m.name == "" {
+		return errors.New("this is not a root, or it was and has been closed")
+	}
+	m.name = ""
+	return nil
+}
+
+func (m *memMapSubFs) FS() Fs {
+	return m.MemMapFs
+}
+
+func (m *memMapSubFs) Lstat(name string) (fs.FileInfo, error) {
+	info, _, err := m.LstatIfPossible(name)
+	return info, err
+}
+
+// isRootedAt tells you if thispath exists within thatpath
+func isRootedAt(thispath, thatpath string) bool {
+	return strings.HasPrefix(thispath, thatpath)
+}
+
+func (m *memMapSubFs) OpenRoot(name string) (Root, error) {
+
+	info, err := m.Stat(name)
+	if err != nil {
+		return nil, fmt.Errorf("could not open root. %w", err)
+	}
+	if !info.IsDir() {
+		return nil, errors.New("could not open root. not a directory")
+	}
+	subFs := &memMapSubFs{
+		&MemMapFs{
+			data: make(map[string]*mem.FileData),
+		},
+		name,
+	}
+
+	Walk(m, name, func(path string, info fs.FileInfo, err error) error {
+		if isRootedAt(path, m.name) && !info.IsDir() {
+			subFs.data[path] = m.data[path]
+		}
+		return nil
+	})
+
+	return subFs, nil
 }
 
 func NewMemMapFs() Fs {
