@@ -40,22 +40,39 @@ type MemMapFs struct {
 }
 
 type memMapSubFs struct {
+	*BasePathFs
 	*MemMapFs
-	name string
 }
 
-var _ Fs2 = (*memMapSubFs)(nil)
-var _ Root = (*memMapSubFs)(nil)
-
-func (m *memMapSubFs) Name() string {
-	return m.name
+func NewMapSubFs(parent *MemMapFs, path string) *memMapSubFs {
+	b := &BasePathFs{
+		source: parent,
+		path:   path,
+	}
+	m := &MemMapFs{
+		data: make(map[string]*mem.FileData),
+	}
+	return &memMapSubFs{b, m}
 }
 
+// Name returns the directory that this Fs is rooted at
+func (ms *memMapSubFs) Name() string {
+	return ms.path
+}
+
+// var _ Fs2 = (*memMapSubFs)(nil)
+// var _ Root = (*memMapSubFs)(nil)
+
+// func (m *BasePathFs) Name() string {
+// 	return m.name
+// }
+
+// Close makes a Root stop working
 func (m *memMapSubFs) Close() error {
-	if m.name == "" {
+	if m.BasePathFs == nil {
 		return errors.New("this is not a root, or it was and has been closed")
 	}
-	m.name = ""
+	m.BasePathFs = nil
 	return nil
 }
 
@@ -64,25 +81,26 @@ func (m *memMapSubFs) FS() Fs {
 }
 
 func (m *memMapSubFs) Lstat(name string) (fs.FileInfo, error) {
-	info, _, err := m.LstatIfPossible(name)
+	info, _, err := m.BasePathFs.LstatIfPossible(name)
 	return info, err
 }
 
-// OpenRoot opens a
+// OpenRoot opens a [Root]
 func (m *memMapSubFs) OpenRoot(name string) (Root, error) {
 
-	info, err := m.Stat(name)
+	// subFs := BasePathFs{
+	// 	source: m,
+	// 	path:   name,
+	// }
+
+	subFs := NewMapSubFs(m.MemMapFs, name)
+
+	info, err := m.BasePathFs.Stat(name)
 	if err != nil {
 		return nil, fmt.Errorf("could not open root. %w", err)
 	}
 	if !info.IsDir() {
 		return nil, errors.New("could not open root. not a directory")
-	}
-	subFs := &memMapSubFs{
-		&MemMapFs{
-			data: make(map[string]*mem.FileData),
-		},
-		name,
 	}
 
 	err = Walk(m, name, func(path string, info fs.FileInfo, err error) error {
