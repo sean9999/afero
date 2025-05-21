@@ -918,3 +918,54 @@ func TestMemMapFsRename(t *testing.T) {
 		}
 	}
 }
+
+func TestRoot(t *testing.T) {
+	t.Parallel()
+
+	//	create a parent Fs with a sub-dir we can root at
+	parent := NewMemMapFs()
+	f, err := parent.Create("private.txt")
+	if err != nil {
+		t.Error(err)
+	}
+	f.Write([]byte("secret stuff"))
+	parent.Mkdir("Public", os.ModeDir)
+	f, err = parent.Create("Public/hello.txt")
+	if err != nil {
+		t.Error(err)
+	}
+	f, err = parent.Open("private.txt")
+	if err != nil {
+		t.Error(err)
+	}
+
+	s, err := NewRootableFs(parent, "Public")
+	if err != nil {
+		t.Error(err)
+	}
+
+	f, err = s.Open("hello.txt")
+	if err != nil {
+		t.Error(err)
+	}
+
+	f, err = s.Open("private.txt")
+	if err == nil {
+		t.Error("opening this file should be an error")
+	}
+
+	//	"." should be what parent knows as "Public"
+	f, err = s.Open(".")
+	if err != nil {
+		t.Error(err)
+	}
+	entries, err := f.Readdir(0)
+	if err != nil {
+		t.Error(err)
+	}
+
+	if len(entries) != 1 {
+		t.Error(entries)
+	}
+
+}

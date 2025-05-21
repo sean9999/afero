@@ -39,25 +39,38 @@ type MemMapFs struct {
 	init sync.Once
 }
 
-type memMapSubFs struct {
+var _ Root = (*rootableMemMapFs)(nil)
+
+// a *rootableMemMapFs is a *MemMapFs that can satisfy [Root]
+type rootableMemMapFs struct {
 	*BasePathFs
-	*MemMapFs
 }
 
-func NewMapSubFs(parent *MemMapFs, path string) *memMapSubFs {
+// NewRootableFs creates a rootableMemMapFs with its *MemMapFs rooted at rootDir
+func NewRootableFs(fileSystem Fs, rootDir string) (*rootableMemMapFs, error) {
 	b := &BasePathFs{
-		source: parent,
-		path:   path,
+		source: fileSystem,
+		path:   rootDir,
 	}
-	m := &MemMapFs{
-		data: make(map[string]*mem.FileData),
+
+	info, err := fileSystem.Stat(rootDir)
+	if err != nil {
+		return nil, err
 	}
-	return &memMapSubFs{b, m}
+	if !info.IsDir() {
+		return nil, errors.New("not a directory")
+	}
+
+	return &rootableMemMapFs{b}, nil
 }
 
-// Name returns the directory that this Fs is rooted at
-func (ms *memMapSubFs) Name() string {
+// Name returns the directory that this *memMapSubFs is rooted at
+func (ms *rootableMemMapFs) Name() string {
 	return ms.path
+}
+
+func (ms *rootableMemMapFs) Open(name string) (File, error) {
+	return ms.BasePathFs.Open(name)
 }
 
 // var _ Fs2 = (*memMapSubFs)(nil)
@@ -67,48 +80,32 @@ func (ms *memMapSubFs) Name() string {
 // 	return m.name
 // }
 
+var ErrInvalidRoot = errors.New("invalid root")
+
 // Close makes a Root stop working
-func (m *memMapSubFs) Close() error {
+func (m *rootableMemMapFs) Close() error {
 	if m.BasePathFs == nil {
-		return errors.New("this is not a root, or it was and has been closed")
+		return fmt.Errorf("could not close. %w", ErrInvalidRoot)
 	}
 	m.BasePathFs = nil
 	return nil
 }
 
-func (m *memMapSubFs) FS() Fs {
-	return m.MemMapFs
+func (m *rootableMemMapFs) FS() Fs {
+	// luckily, *rootableMemMapFs already is an Fs
+	return m
 }
 
-func (m *memMapSubFs) Lstat(name string) (fs.FileInfo, error) {
+func (m *rootableMemMapFs) Lstat(name string) (fs.FileInfo, error) {
 	info, _, err := m.BasePathFs.LstatIfPossible(name)
 	return info, err
 }
 
-// OpenRoot opens a [Root]
-func (m *memMapSubFs) OpenRoot(name string) (Root, error) {
+// OpenRoot opens a [Root], rooted at a directory in *rootableMemMapFs
+func (m *rootableMemMapFs) OpenRoot(name string) (Root, error) {
 
-	// subFs := BasePathFs{
-	// 	source: m,
-	// 	path:   name,
-	// }
-
-	subFs := NewMapSubFs(m.MemMapFs, name)
-
-	info, err := m.BasePathFs.Stat(name)
-	if err != nil {
-		return nil, fmt.Errorf("could not open root. %w", err)
-	}
-	if !info.IsDir() {
-		return nil, errors.New("could not open root. not a directory")
-	}
-
-	err = Walk(m, name, func(path string, info fs.FileInfo, err error) error {
-		if strings.HasPrefix(m.name, fmt.Sprintf("%s%s", path, FilePathSeparator)) {
-			subFs.data[path] = m.data[path]
-		}
-		return nil
-	})
+	//	the new root is the old root with a new path
+	subFs, err := NewRootableFs(m.source, filepath.Join(m.path, name))
 	if err != nil {
 		return nil, fmt.Errorf("could not open root. %w", err)
 	}
