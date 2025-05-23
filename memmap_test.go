@@ -940,7 +940,7 @@ func TestRoot(t *testing.T) {
 		t.Error(err)
 	}
 
-	s, err := NewRootedFs(parent, "Public")
+	s, err := NewRootFs(parent, "Public")
 	if err != nil {
 		t.Error(err)
 	}

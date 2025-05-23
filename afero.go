@@ -114,12 +114,8 @@ type Fs interface {
 
 	// Chtimes changes the access and modification times of the named file
 	Chtimes(name string, atime time.Time, mtime time.Time) error
-}
 
-type Fs2 interface {
-	Fs
-
-	// OpenRoot opens a [Root]
+	// OpenRoot opens a [Root], if name is a valid subdirectory
 	OpenRoot(name string) (Root, error)
 }
 

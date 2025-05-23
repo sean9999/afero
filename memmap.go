@@ -37,12 +37,12 @@ type MemMapFs struct {
 	init sync.Once
 }
 
-func NewMemMapFs() Fs2 {
+func NewMemMapFs() Fs {
 	return &MemMapFs{}
 }
 
 func (m *MemMapFs) OpenRoot(name string) (Root, error) {
-	return NewRootedFs(m, name)
+	return NewRootFs(m, name)
 }
 
 func (m *MemMapFs) getData() map[string]*mem.FileData {
