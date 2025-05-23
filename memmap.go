@@ -14,10 +14,8 @@
 package afero
 
 import (
-	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 
 	"log"
 	"os"
@@ -39,82 +37,12 @@ type MemMapFs struct {
 	init sync.Once
 }
 
-var _ Root = (*rootableMemMapFs)(nil)
-
-// a *rootableMemMapFs is a *MemMapFs that can satisfy [Root]
-type rootableMemMapFs struct {
-	*BasePathFs
-}
-
-// NewRootableFs creates a rootableMemMapFs with its *MemMapFs rooted at rootDir
-func NewRootableFs(fileSystem Fs, rootDir string) (*rootableMemMapFs, error) {
-	b := &BasePathFs{
-		source: fileSystem,
-		path:   rootDir,
-	}
-
-	info, err := fileSystem.Stat(rootDir)
-	if err != nil {
-		return nil, err
-	}
-	if !info.IsDir() {
-		return nil, errors.New("not a directory")
-	}
-
-	return &rootableMemMapFs{b}, nil
-}
-
-// Name returns the directory that this *memMapSubFs is rooted at
-func (ms *rootableMemMapFs) Name() string {
-	return ms.path
-}
-
-func (ms *rootableMemMapFs) Open(name string) (File, error) {
-	return ms.BasePathFs.Open(name)
-}
-
-// var _ Fs2 = (*memMapSubFs)(nil)
-// var _ Root = (*memMapSubFs)(nil)
-
-// func (m *BasePathFs) Name() string {
-// 	return m.name
-// }
-
-var ErrInvalidRoot = errors.New("invalid root")
-
-// Close makes a Root stop working
-func (m *rootableMemMapFs) Close() error {
-	if m.BasePathFs == nil {
-		return fmt.Errorf("could not close. %w", ErrInvalidRoot)
-	}
-	m.BasePathFs = nil
-	return nil
-}
-
-func (m *rootableMemMapFs) FS() Fs {
-	// luckily, *rootableMemMapFs already is an Fs
-	return m
-}
-
-func (m *rootableMemMapFs) Lstat(name string) (fs.FileInfo, error) {
-	info, _, err := m.BasePathFs.LstatIfPossible(name)
-	return info, err
-}
-
-// OpenRoot opens a [Root], rooted at a directory in *rootableMemMapFs
-func (m *rootableMemMapFs) OpenRoot(name string) (Root, error) {
-
-	//	the new root is the old root with a new path
-	subFs, err := NewRootableFs(m.source, filepath.Join(m.path, name))
-	if err != nil {
-		return nil, fmt.Errorf("could not open root. %w", err)
-	}
-
-	return subFs, nil
-}
-
-func NewMemMapFs() Fs {
+func NewMemMapFs() Fs2 {
 	return &MemMapFs{}
+}
+
+func (m *MemMapFs) OpenRoot(name string) (Root, error) {
+	return NewRootedFs(m, name)
 }
 
 func (m *MemMapFs) getData() map[string]*mem.FileData {

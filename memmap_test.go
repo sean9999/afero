@@ -1,6 +1,7 @@
 package afero
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -939,12 +940,12 @@ func TestRoot(t *testing.T) {
 		t.Error(err)
 	}
 
-	s, err := NewRootableFs(parent, "Public")
+	s, err := NewRootedFs(parent, "Public")
 	if err != nil {
 		t.Error(err)
 	}
 
-	f, err = s.Open("hello.txt")
+	helloFile, err := s.Open("hello.txt")
 	if err != nil {
 		t.Error(err)
 	}
@@ -967,5 +968,14 @@ func TestRoot(t *testing.T) {
 	if len(entries) != 1 {
 		t.Error(entries)
 	}
+
+	//	try to escape chroot
+	_, err = s.Open("../private.txt")
+	if !errors.Is(err, ErrInvalidRoot) {
+		t.Errorf("we were expecting an ErrInvalidRoot, but got %s", err)
+	}
+
+	//	alter a file in a root, and see that it is also altered in the parent
+	helloFile.WriteString("hello world")
 
 }
